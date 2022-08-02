@@ -50,11 +50,7 @@ class ExternalProgram(mesonlib.HoldableObject):
             if mesonlib.is_windows():
                 cmd = self.command[0]
                 args = self.command[1:]
-                # Check whether the specified cmd is a path to a script, in
-                # which case we need to insert the interpreter. If not, try to
-                # use it as-is.
-                ret = self._shebang_to_cmd(cmd)
-                if ret:
+                if ret := self._shebang_to_cmd(cmd):
                     self.command = ret + args
                 else:
                     self.command = [cmd] + args
@@ -78,19 +74,21 @@ class ExternalProgram(mesonlib.HoldableObject):
             else:
                 self.path = self.command[-1]
 
-        if not silent:
-            # ignore the warning because derived classes never call this __init__
-            # method, and thus only the found() method of this class is ever executed
-            if self.found():  # lgtm [py/init-calls-subclass]
-                mlog.log('Program', mlog.bold(name), 'found:', mlog.green('YES'),
-                         '(%s)' % ' '.join(self.command))
+        if not silent:  # lgtm [py/init-calls-subclass]
+            if self.found():
+                mlog.log(
+                    'Program',
+                    mlog.bold(name),
+                    'found:',
+                    mlog.green('YES'),
+                    f"({' '.join(self.command)})",
+                )
+
             else:
                 mlog.log('Program', mlog.bold(name), 'found:', mlog.red('NO'))
 
     def summary_value(self) -> T.Union[str, mlog.AnsiDecorator]:
-        if not self.found():
-            return mlog.red('NO')
-        return self.path
+        return self.path if self.found() else mlog.red('NO')
 
     def __repr__(self) -> str:
         r = '<{} {!r} -> {!r}>'
@@ -115,7 +113,7 @@ class ExternalProgram(mesonlib.HoldableObject):
             if not match:
                 m = 'Could not find a version number in output of {!r}'
                 raise mesonlib.MesonException(m.format(raw_cmd))
-            self.cached_version = match.group(1)
+            self.cached_version = match[1]
         return self.cached_version
 
     @classmethod
@@ -155,9 +153,8 @@ class ExternalProgram(mesonlib.HoldableObject):
 
     @staticmethod
     def from_entry(name: str, command: T.Union[str, T.List[str]]) -> 'ExternalProgram':
-        if isinstance(command, list):
-            if len(command) == 1:
-                command = command[0]
+        if isinstance(command, list) and len(command) == 1:
+            command = command[0]
         # We cannot do any searching if the command is a list, and we don't
         # need to search if the path is an absolute path.
         if isinstance(command, list) or os.path.isabs(command):
@@ -203,12 +200,10 @@ class ExternalProgram(mesonlib.HoldableObject):
                     # We know what python3 is, we're running on it
                     if len(commands) > 0 and commands[0] == 'python3':
                         commands = mesonlib.python_command + commands[1:]
-                else:
-                    # Replace python3 with the actual python3 that we are using
-                    if commands[0] == '/usr/bin/env' and commands[1] == 'python3':
-                        commands = mesonlib.python_command + commands[2:]
-                    elif commands[0].split('/')[-1] == 'python3':
-                        commands = mesonlib.python_command + commands[1:]
+                elif commands[0] == '/usr/bin/env' and commands[1] == 'python3':
+                    commands = mesonlib.python_command + commands[2:]
+                elif commands[0].split('/')[-1] == 'python3':
+                    commands = mesonlib.python_command + commands[1:]
                 return commands + [script]
         except Exception as e:
             mlog.debug(str(e))
@@ -230,18 +225,12 @@ class ExternalProgram(mesonlib.HoldableObject):
             return None
         trial = os.path.join(search_dir, name)
         if os.path.exists(trial):
-            if self._is_executable(trial):
-                return [trial]
-            # Now getting desperate. Maybe it is a script file that is
-            # a) not chmodded executable, or
-            # b) we are on windows so they can't be directly executed.
-            return self._shebang_to_cmd(trial)
-        else:
-            if mesonlib.is_windows():
-                for ext in self.windows_exts:
-                    trial_ext = f'{trial}.{ext}'
-                    if os.path.exists(trial_ext):
-                        return [trial_ext]
+            return [trial] if self._is_executable(trial) else self._shebang_to_cmd(trial)
+        if mesonlib.is_windows():
+            for ext in self.windows_exts:
+                trial_ext = f'{trial}.{ext}'
+                if os.path.exists(trial_ext):
+                    return [trial_ext]
         return None
 
     def _search_windows_special_cases(self, name: str, command: str) -> T.List[T.Optional[str]]:
@@ -264,11 +253,7 @@ class ExternalProgram(mesonlib.HoldableObject):
             if name_ext[1:].lower() in self.windows_exts:
                 # Good, it can be directly executed
                 return [command]
-            # Try to extract the interpreter from the shebang
-            commands = self._shebang_to_cmd(command)
-            if commands:
-                return commands
-            return [None]
+            return commands if (commands := self._shebang_to_cmd(command)) else [None]
         # Maybe the name is an absolute path to a native Windows
         # executable, but without the extension. This is technically wrong,
         # but many people do it because it works in the MinGW shell.
@@ -282,8 +267,7 @@ class ExternalProgram(mesonlib.HoldableObject):
         # where we manually search for a script with a shebang in PATH.
         search_dirs = self._windows_sanitize_path(os.environ.get('PATH', '')).split(';')
         for search_dir in search_dirs:
-            commands = self._search_dir(name, search_dir)
-            if commands:
+            if commands := self._search_dir(name, search_dir):
                 return commands
         return [None]
 
@@ -292,8 +276,7 @@ class ExternalProgram(mesonlib.HoldableObject):
         Search in the specified dir for the specified executable by name
         and if not found search in PATH
         '''
-        commands = self._search_dir(name, search_dir)
-        if commands:
+        if commands := self._search_dir(name, search_dir):
             return commands
         # Do a standard search in PATH
         path = os.environ.get('PATH', None)
@@ -375,7 +358,11 @@ def find_external_program(env: 'Environment', for_machine: MachineChoice, name: 
     mlog.debug(f'{display_name} binary missing from cross or native file, or env var undefined.')
     # Fallback on hard-coded defaults, if a default binary is allowed for use
     # with cross targets, or if this is not a cross target
-    if allow_default_for_cross or not (for_machine is MachineChoice.HOST and env.is_cross_build(for_machine)):
+    if (
+        allow_default_for_cross
+        or for_machine is not MachineChoice.HOST
+        or not env.is_cross_build(for_machine)
+    ):
         for potential_path in default_names:
             mlog.debug(f'Trying a default {display_name} fallback at', potential_path)
             yield ExternalProgram(potential_path, silent=True)

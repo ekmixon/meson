@@ -114,7 +114,10 @@ def cmake_defines_to_args(raw: T.Any, permissive: bool = False) -> T.List[str]:
 
     for i in raw:
         if not isinstance(i, dict):
-            raise MesonException('Invalid CMake defines. Expected a dict, but got a {}'.format(type(i).__name__))
+            raise MesonException(
+                f'Invalid CMake defines. Expected a dict, but got a {type(i).__name__}'
+            )
+
         for key, val in i.items():
             assert isinstance(key, str)
             if key in blacklist_cmake_defs:
@@ -128,17 +131,20 @@ def cmake_defines_to_args(raw: T.Any, permissive: bool = False) -> T.List[str]:
                 val_str = 'ON' if val else 'OFF'
                 res += [f'-D{key}={val_str}']
             else:
-                raise MesonException('Type "{}" of "{}" is not supported as for a CMake define value'.format(type(val).__name__, key))
+                raise MesonException(
+                    f'Type "{type(val).__name__}" of "{key}" is not supported as for a CMake define value'
+                )
+
 
     return res
 
 # TODO: this functuin will become obsolete once the `cmake_args` kwarg is dropped
 def check_cmake_args(args: T.List[str]) -> T.List[str]:
     res = []  # type: T.List[str]
-    dis = ['-D' + x for x in blacklist_cmake_defs]
+    dis = [f'-D{x}' for x in blacklist_cmake_defs]
     assert dis  # Ensure that dis is not empty.
     for i in args:
-        if any([i.startswith(x) for x in dis]):
+        if any(i.startswith(x) for x in dis):
             mlog.warning('Setting', mlog.bold(i), 'is not supported. See the meson docs for cross compilation support:')
             mlog.warning('  - URL: https://mesonbuild.com/CMake-module.html#cross-compilation')
             mlog.warning('  --> Ignoring this option')
@@ -200,10 +206,7 @@ class CMakeTarget:
         # self.link_path             = Path(data.get('linkPath', ''))                       # type: Path
         self.type                    = data.get('type', 'EXECUTABLE')                       # type: str
         # self.is_generator_provided = data.get('isGeneratorProvided', False)               # type: bool
-        self.files                   = []                                                   # type: T.List[CMakeFileGroup]
-
-        for i in data.get('fileGroups', []):
-            self.files += [CMakeFileGroup(i)]
+        self.files = [CMakeFileGroup(i) for i in data.get('fileGroups', [])]
 
     def log(self) -> None:
         mlog.log('artifacts             =', mlog.bold(', '.join([x.as_posix() for x in self.artifacts])))
@@ -230,10 +233,7 @@ class CMakeProject:
         self.src_dir   = Path(data.get('sourceDirectory', ''))   # type: Path
         self.build_dir = Path(data.get('buildDirectory', ''))    # type: Path
         self.name      = data.get('name', '')                    # type: str
-        self.targets   = []                                      # type: T.List[CMakeTarget]
-
-        for i in data.get('targets', []):
-            self.targets += [CMakeTarget(i)]
+        self.targets = [CMakeTarget(i) for i in data.get('targets', [])]
 
     def log(self) -> None:
         mlog.log('src_dir   =', mlog.bold(self.src_dir.as_posix()))
@@ -247,9 +247,7 @@ class CMakeProject:
 class CMakeConfiguration:
     def __init__(self, data: T.Dict[str, T.Any]) -> None:
         self.name     = data.get('name', '')   # type: str
-        self.projects = []                     # type: T.List[CMakeProject]
-        for i in data.get('projects', []):
-            self.projects += [CMakeProject(i)]
+        self.projects = [CMakeProject(i) for i in data.get('projects', [])]
 
     def log(self) -> None:
         mlog.log('name =', mlog.bold(self.name))
@@ -289,9 +287,7 @@ class SingleTargetOptions:
         return res
 
     def get_compile_args(self, lang: str, initial: T.List[str]) -> T.List[str]:
-        if lang in self.lang_args:
-            return initial + self.lang_args[lang]
-        return initial
+        return initial + self.lang_args[lang] if lang in self.lang_args else initial
 
     def get_link_args(self, initial: T.List[str]) -> T.List[str]:
         return initial + self.link_args

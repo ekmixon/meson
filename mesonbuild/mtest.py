@@ -153,14 +153,12 @@ def print_safe(s: str) -> None:
 def join_lines(a: str, b: str) -> str:
     if not a:
         return b
-    if not b:
-        return a
-    return a + '\n' + b
+    return a + '\n' + b if b else a
 
 def dashes(s: str, dash: str, cols: int) -> str:
     if not s:
         return dash * cols
-    s = ' ' + s + ' '
+    s = f' {s} '
     width = uniwidth(s)
     first = (cols - width) // 2
     s = dash * first + s
@@ -197,7 +195,7 @@ if not is_windows():
     sh_quote = shlex.quote
 
 def env_tuple_to_str(env: T.Iterable[T.Tuple[str, str]]) -> str:
-    return ''.join(["{}={} ".format(k, sh_quote(v)) for k, v in env])
+    return ''.join([f"{k}={sh_quote(v)} " for k, v in env])
 
 
 class TestException(MesonException):
@@ -317,7 +315,7 @@ class TAPParser:
     version = 12
 
     def parse_test(self, ok: bool, num: int, name: str, directive: T.Optional[str], explanation: T.Optional[str]) -> \
-            T.Generator[T.Union['TAPParser.Test', 'TAPParser.Error'], None, None]:
+                T.Generator[T.Union['TAPParser.Test', 'TAPParser.Error'], None, None]:
         name = name.strip()
         explanation = explanation.strip() if explanation else None
         if directive is not None:
@@ -354,8 +352,7 @@ class TAPParser:
             # YAML blocks are only accepted after a test
             if self.state == self._AFTER_TEST:
                 if self.version >= 13:
-                    m = self._RE_YAML_START.match(line)
-                    if m:
+                    if m := self._RE_YAML_START.match(line):
                         self.state = self._YAML
                         self.yaml_lineno = self.lineno
                         self.yaml_indent = m.group(1)
@@ -375,8 +372,7 @@ class TAPParser:
             if line.startswith('#'):
                 return
 
-            m = self._RE_TEST.match(line)
-            if m:
+            if m := self._RE_TEST.match(line):
                 if self.plan and self.plan.late and not self.found_late_test:
                     yield self.Error('unexpected test after late plan')
                     self.found_late_test = True
@@ -389,8 +385,7 @@ class TAPParser:
                 self.state = self._AFTER_TEST
                 return
 
-            m = self._RE_PLAN.match(line)
-            if m:
+            if m := self._RE_PLAN.match(line):
                 if self.plan:
                     yield self.Error('more than one plan found')
                 else:
@@ -408,14 +403,12 @@ class TAPParser:
                     yield self.plan
                 return
 
-            m = self._RE_BAILOUT.match(line)
-            if m:
+            if m := self._RE_BAILOUT.match(line):
                 yield self.Bailout(m.group(1))
                 self.bailed_out = True
                 return
 
-            m = self._RE_VERSION.match(line)
-            if m:
+            if m := self._RE_VERSION.match(line):
                 # The TAP version is only accepted as the first line
                 if self.lineno != 1:
                     yield self.Error('version number must be on the first line')
@@ -430,7 +423,7 @@ class TAPParser:
             if not line:
                 return
 
-            yield self.Error('unexpected input at line {}'.format((self.lineno,)))
+            yield self.Error(f'unexpected input at line {(self.lineno, )}')
         else:
             # end of file
             if self.state == self._YAML:
@@ -533,10 +526,10 @@ class ConsoleLogger(TestLogger):
         if len(self.running_tests) == 1:
             count = f'{self.started_tests}/{self.test_count}'
         else:
-            count = '{}-{}/{}'.format(self.started_tests - len(self.running_tests) + 1,
-                                      self.started_tests, self.test_count)
+            count = f'{self.started_tests - len(self.running_tests) + 1}-{self.started_tests}/{self.test_count}'
 
-        left = '[{}] {} '.format(count, self.SPINNER[self.spinner_index])
+
+        left = f'[{count}] {self.SPINNER[self.spinner_index]} '
         self.spinner_index = (self.spinner_index + 1) % len(self.SPINNER)
 
         right = '{spaces} {dur:{durlen}}'.format(
@@ -548,9 +541,8 @@ class ConsoleLogger(TestLogger):
                 timeout=self.progress_test.timeout,
                 durlen=harness.duration_max_len)
         right += 's'
-        detail = self.progress_test.detail
-        if detail:
-            right += '   ' + detail
+        if detail := self.progress_test.detail:
+            right += f'   {detail}'
 
         line = harness.format(self.progress_test, colorize=True,
                               max_left_width=self.max_left_width,
@@ -638,8 +630,7 @@ class ConsoleLogger(TestLogger):
                 return
             print(result.res.get_command_marker() + cmdline)
 
-        log = self.shorten_log(harness, result)
-        if log:
+        if log := self.shorten_log(harness, result):
             print(self.output_start)
             print_safe(log)
             print(self.output_end)
@@ -699,10 +690,9 @@ class TextLogfileBuilder(TestFileLogger):
 
     def log(self, harness: 'TestHarness', result: 'TestRun') -> None:
         self.file.write(harness.format(result, False) + '\n')
-        cmdline = result.cmdline
-        if cmdline:
+        if cmdline := result.cmdline:
             starttime_str = time.strftime("%H:%M:%S", time.gmtime(result.starttime))
-            self.file.write(starttime_str + ' ' + cmdline + '\n')
+            self.file.write(f'{starttime_str} {cmdline}' + '\n')
             self.file.write(dashes('output', '-', 78) + '\n')
             self.file.write(result.get_log())
             self.file.write(dashes('', '-', 78) + '\n\n')
@@ -760,7 +750,7 @@ class JunitBuilder(TestLogger):
         if test.junit is not None:
             for suite in test.junit.findall('.//testsuite'):
                 # Assume that we don't need to merge anything here...
-                suite.attrib['name'] = '{}.{}.{}'.format(test.project, test.name, suite.attrib['name'])
+                suite.attrib['name'] = f"{test.project}.{test.name}.{suite.attrib['name']}"
 
                 # GTest can inject invalid attributes
                 for case in suite.findall('.//testcase[@result]'):
@@ -781,13 +771,29 @@ class JunitBuilder(TestLogger):
                 'testsuite',
                 name=suitename,
                 tests=str(len(test.results)),
-                errors=str(sum(1 for r in test.results if r.result in
-                               {TestResult.INTERRUPT, TestResult.ERROR})),
-                failures=str(sum(1 for r in test.results if r.result in
-                                 {TestResult.FAIL, TestResult.UNEXPECTEDPASS, TestResult.TIMEOUT})),
-                skipped=str(sum(1 for r in test.results if r.result is TestResult.SKIP)),
+                errors=str(
+                    sum(
+                        r.result in {TestResult.INTERRUPT, TestResult.ERROR}
+                        for r in test.results
+                    )
+                ),
+                failures=str(
+                    sum(
+                        r.result
+                        in {
+                            TestResult.FAIL,
+                            TestResult.UNEXPECTEDPASS,
+                            TestResult.TIMEOUT,
+                        }
+                        for r in test.results
+                    )
+                ),
+                skipped=str(
+                    sum(r.result is TestResult.SKIP for r in test.results)
+                ),
                 time=str(test.duration),
             )
+
 
             for subtest in test.results:
                 # Both name and classname are required. Use the suite name as
@@ -870,7 +876,7 @@ class TestRun:
         self._num = None       # type: T.Optional[int]
         self.name = name
         self.timeout = timeout
-        self.results = list()  # type: T.List[TAPParser.Test]
+        self.results = []
         self.returncode = 0
         self.starttime = None  # type: T.Optional[float]
         self.duration = None   # type: T.Optional[float]

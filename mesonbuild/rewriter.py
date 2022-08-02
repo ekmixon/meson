@@ -102,10 +102,7 @@ class RequiredKeys:
 
 class MTypeBase:
     def __init__(self, node: T.Optional[BaseNode] = None):
-        if node is None:
-            self.node = self._new_node()  # lgtm [py/init-calls-subclass] (node creation does not depend on base class state)
-        else:
-            self.node = node
+        self.node = self._new_node() if node is None else node
         self.node_type = None
         for i in self.supported_nodes():  # lgtm [py/init-calls-subclass] (listing nodes does not depend on base class state)
             if isinstance(self.node, i):
@@ -206,9 +203,8 @@ class MTypeList(MTypeBase):
         return False
 
     def get_node(self):
-        if isinstance(self.node, ArrayNode):
-            if len(self.node.args.arguments) == 1:
-                return self.node.args.arguments[0]
+        if isinstance(self.node, ArrayNode) and len(self.node.args.arguments) == 1:
+            return self.node.args.arguments[0]
         return self.node
 
     def supported_element_nodes(self):
@@ -222,9 +218,7 @@ class MTypeList(MTypeBase):
         if not isinstance(value, list):
             value = [value]
         self._ensure_array_node()
-        self.node.args.arguments = [] # Remove all current nodes
-        for i in value:
-            self.node.args.arguments += [self._new_element_node(i)]
+        self.node.args.arguments = [self._new_element_node(i) for i in value]
 
     def add_value(self, value):
         if not isinstance(value, list):
@@ -263,9 +257,7 @@ class MTypeStrList(MTypeList):
         return StringNode(Token('', '', 0, 0, 0, None, str(value)))
 
     def _check_is_equal(self, node, value) -> bool:
-        if isinstance(node, StringNode):
-            return node.value == value
-        return False
+        return node.value == value if isinstance(node, StringNode) else False
 
     def _check_regex_matches(self, node, regex: str) -> bool:
         if isinstance(node, StringNode):
@@ -283,9 +275,7 @@ class MTypeIDList(MTypeList):
         return IdNode(Token('', '', 0, 0, 0, None, str(value)))
 
     def _check_is_equal(self, node, value) -> bool:
-        if isinstance(node, IdNode):
-            return node.value == value
-        return False
+        return node.value == value if isinstance(node, IdNode) else False
 
     def _check_regex_matches(self, node, regex: str) -> bool:
         if isinstance(node, StringNode):
@@ -395,7 +385,7 @@ class Rewriter:
         def check_list(name: str) -> T.List[BaseNode]:
             result = []
             for i in self.interpreter.targets:
-                if name == i['name'] or name == i['id']:
+                if name in [i['name'], i['id']]:
                     result += [i]
             return result
 
@@ -403,21 +393,27 @@ class Rewriter:
         if targets:
             if len(targets) == 1:
                 return targets[0]
-            else:
-                mlog.error('There are multiple targets matching', mlog.bold(target))
-                for i in targets:
-                    mlog.error('  -- Target name', mlog.bold(i['name']), 'with ID', mlog.bold(i['id']))
-                mlog.error('Please try again with the unique ID of the target', *self.on_error())
-                self.handle_error()
-                return None
+            mlog.error('There are multiple targets matching', mlog.bold(target))
+            for i in targets:
+                mlog.error('  -- Target name', mlog.bold(i['name']), 'with ID', mlog.bold(i['id']))
+            mlog.error('Please try again with the unique ID of the target', *self.on_error())
+            self.handle_error()
+            return None
 
         # Check the assignments
         tgt = None
         if target in self.interpreter.assignments:
             node = self.interpreter.assignments[target]
-            if isinstance(node, FunctionNode):
-                if node.func_name in ['executable', 'jar', 'library', 'shared_library', 'shared_module', 'static_library', 'both_libraries']:
-                    tgt = self.interpreter.assign_vals[target]
+            if isinstance(node, FunctionNode) and node.func_name in [
+                'executable',
+                'jar',
+                'library',
+                'shared_library',
+                'shared_module',
+                'static_library',
+                'both_libraries',
+            ]:
+                tgt = self.interpreter.assign_vals[target]
 
         return tgt
 
@@ -435,10 +431,9 @@ class Rewriter:
         # Check the assignments
         if dependency in self.interpreter.assignments:
             node = self.interpreter.assignments[dependency]
-            if isinstance(node, FunctionNode):
-                if node.func_name in ['dependency']:
-                    name = self.interpreter.flatten_args(node.args)[0]
-                    dep = check_list(name)
+            if isinstance(node, FunctionNode) and node.func_name in ['dependency']:
+                name = self.interpreter.flatten_args(node.args)[0]
+                dep = check_list(name)
 
         return dep
 
@@ -510,13 +505,11 @@ class Rewriter:
             node = self.interpreter.project_node
             arg_node = node.args
         elif cmd['function'] == 'target':
-            tmp = self.find_target(cmd['id'])
-            if tmp:
+            if tmp := self.find_target(cmd['id']):
                 node = tmp['node']
                 arg_node = node.args
         elif cmd['function'] == 'dependency':
-            tmp = self.find_dependency(cmd['id'])
-            if tmp:
+            if tmp := self.find_dependency(cmd['id']):
                 node = tmp['node']
                 arg_node = node.args
         if not node:
@@ -542,7 +535,7 @@ class Rewriter:
                         data_list += [element]
                     info_data[key] = data_list
 
-            self.add_info('kwargs', '{}#{}'.format(cmd['function'], cmd['id']), info_data)
+            self.add_info('kwargs', f"{cmd['function']}#{cmd['id']}", info_data)
             return # Nothing else to do
 
         # Modify the kwargs
@@ -636,10 +629,7 @@ class Rewriter:
 
         if cmd['operation'] == 'src_add':
             node = None
-            if target['sources']:
-                node = target['sources'][0]
-            else:
-                node = target['node']
+            node = target['sources'][0] if target['sources'] else target['node']
             assert node is not None
 
             # Generate the current source list
@@ -680,9 +670,8 @@ class Rewriter:
             def find_node(src):
                 for i in target['sources']:
                     for j in arg_list_from_node(i):
-                        if isinstance(j, StringNode):
-                            if j.value == src:
-                                return i, j
+                        if isinstance(j, StringNode) and j.value == src:
+                            return i, j
                 return None, None
 
             for i in cmd['sources']:
@@ -715,8 +704,8 @@ class Rewriter:
                 return self.handle_error()
 
             id_base = re.sub(r'[- ]', '_', cmd['target'])
-            target_id = id_base + '_exe' if cmd['target_type'] == 'executable' else '_lib'
-            source_id = id_base + '_sources'
+            target_id = f'{id_base}_exe' if cmd['target_type'] == 'executable' else '_lib'
+            source_id = f'{id_base}_sources'
             filename = os.path.join(cmd['subdir'], environment.build_filename)
 
             # Build src list
@@ -777,8 +766,10 @@ class Rewriter:
         if 'type' not in cmd:
             raise RewriterException('Command has no key "type"')
         if cmd['type'] not in self.functions:
-            raise RewriterException('Unknown command "{}". Supported commands are: {}'
-                                    .format(cmd['type'], list(self.functions.keys())))
+            raise RewriterException(
+                f"""Unknown command "{cmd['type']}". Supported commands are: {list(self.functions.keys())}"""
+            )
+
         self.functions[cmd['type']](cmd)
 
     def apply_changes(self):
@@ -796,7 +787,7 @@ class Rewriter:
         str_list = []
         for i in work_nodes:
             new_data = ''
-            if i['action'] == 'modify' or i['action'] == 'add':
+            if i['action'] in ['modify', 'add']:
                 printer = AstPrinter()
                 i['node'].accept(printer)
                 printer.post_process()
@@ -922,11 +913,10 @@ def generate_def_opts(options) -> T.List[dict]:
     }]
 
 def generate_cmd(options) -> T.List[dict]:
-    if os.path.exists(options.json):
-        with open(options.json, encoding='utf-8') as fp:
-            return json.load(fp)
-    else:
+    if not os.path.exists(options.json):
         return json.loads(options.json)
+    with open(options.json, encoding='utf-8') as fp:
+        return json.load(fp)
 
 # Map options.type to the actual type name
 cli_type_map = {

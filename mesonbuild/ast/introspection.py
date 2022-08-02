@@ -271,12 +271,14 @@ class IntrospectionInterpreter(AstInterpreter):
 
     def build_library(self, node: BaseNode, args: T.List[TYPE_nvar], kwargs: T.Dict[str, TYPE_nvar]) -> T.Optional[T.Dict[str, T.Any]]:
         default_library = self.coredata.get_option(OptionKey('default_library'))
-        if default_library == 'shared':
+        if (
+            default_library == 'shared'
+            or default_library != 'static'
+            and default_library == 'both'
+        ):
             return self.build_target(node, args, kwargs, SharedLibrary)
         elif default_library == 'static':
             return self.build_target(node, args, kwargs, StaticLibrary)
-        elif default_library == 'both':
-            return self.build_target(node, args, kwargs, SharedLibrary)
         return None
 
     def func_executable(self, node: BaseNode, args: T.List[TYPE_nvar], kwargs: T.Dict[str, TYPE_nvar]) -> T.Optional[T.Dict[str, T.Any]]:

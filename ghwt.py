@@ -28,8 +28,7 @@ spdir = 'subprojects'
 
 def gh_get(url):
     r = urllib.request.urlopen(url, timeout=req_timeout)
-    jd = json.loads(r.read().decode('utf-8'))
-    return jd
+    return json.loads(r.read().decode('utf-8'))
 
 def list_projects():
     jd = gh_get('https://api.github.com/orgs/mesonbuild/repos')
@@ -41,7 +40,7 @@ def list_projects():
     return 0
 
 def unpack(sproj, branch):
-    tmpdir = os.path.join(spdir, sproj + '_ghwt')
+    tmpdir = os.path.join(spdir, f'{sproj}_ghwt')
     shutil.rmtree(tmpdir, ignore_errors=True)
     subprocess.check_call(['git', 'clone', '-b', branch, f'https://github.com/mesonbuild/{sproj}.git', tmpdir])
     usfile = os.path.join(tmpdir, 'upstream.wrap')

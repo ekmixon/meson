@@ -36,9 +36,8 @@ def add_to_sitemap(from_version, to_version):
        Adds release note entry to sitemap.txt.
     '''
     sitemapfile = '../sitemap.txt'
-    s_f = open(sitemapfile, encoding='utf-8')
-    lines = s_f.readlines()
-    s_f.close()
+    with open(sitemapfile, encoding='utf-8') as s_f:
+        lines = s_f.readlines()
     with open(sitemapfile, 'w', encoding='utf-8') as s_f:
         for line in lines:
             if 'Release-notes' in line and from_version in line:

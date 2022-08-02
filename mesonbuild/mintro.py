@@ -49,7 +49,7 @@ class IntroCommand:
                  desc: str,
                  func: T.Optional[T.Callable[[], T.Union[dict, list]]] = None,
                  no_bd: T.Optional[T.Callable[[IntrospectionInterpreter], T.Union[dict, list]]] = None) -> None:
-        self.desc = desc + '.'
+        self.desc = f'{desc}.'
         self.func = func
         self.no_bd = no_bd
 
@@ -278,9 +278,12 @@ def find_buildsystem_files_list(src_dir: str) -> T.List[str]:
     # I feel dirty about this. But only slightly.
     filelist = []  # type: T.List[str]
     for root, _, files in os.walk(src_dir):
-        for f in files:
-            if f == 'meson.build' or f == 'meson_options.txt':
-                filelist.append(os.path.relpath(os.path.join(root, f), src_dir))
+        filelist.extend(
+            os.path.relpath(os.path.join(root, f), src_dir)
+            for f in files
+            if f in ['meson.build', 'meson_options.txt']
+        )
+
     return filelist
 
 def list_buildsystem_files(builddata: build.Build, interpreter: Interpreter) -> T.List[str]:
@@ -290,41 +293,38 @@ def list_buildsystem_files(builddata: build.Build, interpreter: Interpreter) -> 
     return filelist
 
 def list_deps_from_source(intr: IntrospectionInterpreter) -> T.List[T.Dict[str, T.Union[str, bool]]]:
-    result = []  # type: T.List[T.Dict[str, T.Union[str, bool]]]
-    for i in intr.dependencies:
-        keys = [
-            'name',
-            'required',
-            'version',
-            'has_fallback',
-            'conditional',
-        ]
-        result += [{k: v for k, v in i.items() if k in keys}]
-    return result
+    keys = [
+        'name',
+        'required',
+        'version',
+        'has_fallback',
+        'conditional',
+    ]
+    return [{k: v for k, v in i.items() if k in keys} for i in intr.dependencies]
 
 def list_deps(coredata: cdata.CoreData) -> T.List[T.Dict[str, T.Union[str, T.List[str]]]]:
-    result = []  # type: T.List[T.Dict[str, T.Union[str, T.List[str]]]]
-    for d in coredata.deps.host.values():
-        if d.found():
-            result += [{'name': d.name,
-                        'version': d.get_version(),
-                        'compile_args': d.get_compile_args(),
-                        'link_args': d.get_link_args()}]
-    return result
+    return [
+        {
+            'name': d.name,
+            'version': d.get_version(),
+            'compile_args': d.get_compile_args(),
+            'link_args': d.get_link_args(),
+        }
+        for d in coredata.deps.host.values()
+        if d.found()
+    ]
 
 def get_test_list(testdata: T.List[backends.TestSerialisation]) -> T.List[T.Dict[str, T.Union[str, int, T.List[str], T.Dict[str, str]]]]:
     result = []  # type: T.List[T.Dict[str, T.Union[str, int, T.List[str], T.Dict[str, str]]]]
     for t in testdata:
-        to = {}  # type: T.Dict[str, T.Union[str, int, T.List[str], T.Dict[str, str]]]
-        if isinstance(t.fname, str):
-            fname = [t.fname]
-        else:
-            fname = t.fname
-        to['cmd'] = fname + t.cmd_args
-        if isinstance(t.env, build.EnvironmentVariables):
-            to['env'] = t.env.get_env({})
-        else:
-            to['env'] = t.env
+        fname = [t.fname] if isinstance(t.fname, str) else t.fname
+        to = {
+            'cmd': fname + t.cmd_args,
+            'env': t.env.get_env({})
+            if isinstance(t.env, build.EnvironmentVariables)
+            else t.env,
+        }
+
         to['name'] = t.name
         to['workdir'] = t.workdir
         to['timeout'] = t.timeout
@@ -377,9 +377,7 @@ def print_results(options: argparse.Namespace, results: T.Sequence[T.Tuple[str, 
         # Make to keep the existing output format for a single option
         print(json.dumps(results[0][1], indent=indent))
     else:
-        out = {}
-        for i in results:
-            out[i[0]] = i[1]
+        out = {i[0]: i[1] for i in results}
         print(json.dumps(out, indent=indent))
     return 0
 
@@ -390,8 +388,9 @@ def get_infodir(builddir: T.Optional[str] = None) -> str:
     return infodir
 
 def get_info_file(infodir: str, kind: T.Optional[str] = None) -> str:
-    return os.path.join(infodir,
-                        'meson-info.json' if not kind else f'intro-{kind}.json')
+    return os.path.join(
+        infodir, f'intro-{kind}.json' if kind else 'meson-info.json'
+    )
 
 def load_info_file(infodir: str, kind: T.Optional[str] = None) -> T.Any:
     with open(get_info_file(infodir, kind), encoding='utf-8') as fp:
@@ -430,17 +429,19 @@ def run(options: argparse.Namespace) -> int:
             print('Current directory is not a meson build directory.\n'
                   'Please specify a valid build dir or change the working directory to it.')
         else:
-            print('Introspection file {} does not exist.\n'
-                  'It is also possible that the build directory was generated with an old\n'
-                  'meson version. Please regenerate it in this case.'.format(get_info_file(infodir)))
+            print(
+                f'Introspection file {get_info_file(infodir)} does not exist.\nIt is also possible that the build directory was generated with an old\nmeson version. Please regenerate it in this case.'
+            )
+
         return 1
 
     vers_to_check = get_meson_introspection_required_version()
     for i in vers_to_check:
         if not mesonlib.version_compare(intro_vers, i):
-            print('Introspection version {} is not supported. '
-                  'The required version is: {}'
-                  .format(intro_vers, ' and '.join(vers_to_check)))
+            print(
+                f"Introspection version {intro_vers} is not supported. The required version is: {' and '.join(vers_to_check)}"
+            )
+
             return 1
 
     # Extract introspection information from JSON
@@ -452,7 +453,7 @@ def run(options: argparse.Namespace) -> int:
         try:
             results += [(i, load_info_file(infodir, i))]
         except FileNotFoundError:
-            print('Introspection file {} does not exist.'.format(get_info_file(infodir, i)))
+            print(f'Introspection file {get_info_file(infodir, i)} does not exist.')
             return 1
 
     return print_results(options, results, indent)
@@ -462,7 +463,7 @@ updated_introspection_files = []  # type: T.List[str]
 def write_intro_info(intro_info: T.Sequence[T.Tuple[str, T.Union[dict, T.List[T.Any]]]], info_dir: str) -> None:
     global updated_introspection_files
     for i in intro_info:
-        out_file = os.path.join(info_dir, 'intro-{}.json'.format(i[0]))
+        out_file = os.path.join(info_dir, f'intro-{i[0]}.json')
         tmp_file = os.path.join(info_dir, 'tmp_dump.json')
         with open(tmp_file, 'w', encoding='utf-8') as fp:
             json.dump(i[1], fp)
@@ -473,12 +474,10 @@ def write_intro_info(intro_info: T.Sequence[T.Tuple[str, T.Union[dict, T.List[T.
 def generate_introspection_file(builddata: build.Build, backend: backends.Backend) -> None:
     coredata = builddata.environment.get_coredata()
     intro_types = get_meson_introspection_types(coredata=coredata, builddata=builddata, backend=backend)
-    intro_info = []  # type: T.List[T.Tuple[str, T.Union[dict, T.List[T.Any]]]]
+    intro_info = [
+        (key, val.func()) for key, val in intro_types.items() if val.func
+    ]
 
-    for key, val in intro_types.items():
-        if not val.func:
-            continue
-        intro_info += [(key, val.func())]
 
     write_intro_info(intro_info, builddata.environment.info_dir)
 
@@ -493,9 +492,9 @@ def split_version_string(version: str) -> T.Dict[str, T.Union[str, int]]:
     vers_list = version.split('.')
     return {
         'full': version,
-        'major': int(vers_list[0] if len(vers_list) > 0 else 0),
+        'major': int(vers_list[0] if vers_list else 0),
         'minor': int(vers_list[1] if len(vers_list) > 1 else 0),
-        'patch': int(vers_list[2] if len(vers_list) > 2 else 0)
+        'patch': int(vers_list[2] if len(vers_list) > 2 else 0),
     }
 
 def write_meson_info_file(builddata: build.Build, errors: list, build_files_updated: bool = False) -> None:
@@ -503,15 +502,15 @@ def write_meson_info_file(builddata: build.Build, errors: list, build_files_upda
     info_dir = builddata.environment.info_dir
     info_file = get_meson_info_file(info_dir)
     intro_types = get_meson_introspection_types()
-    intro_info = {}
-
-    for i in intro_types.keys():
-        if not intro_types[i].func:
-            continue
-        intro_info[i] = {
+    intro_info = {
+        i: {
             'file': f'intro-{i}.json',
-            'updated': i in updated_introspection_files
+            'updated': i in updated_introspection_files,
         }
+        for i in intro_types.keys()
+        if intro_types[i].func
+    }
+
 
     info_data = {
         'meson_version': split_version_string(cdata.version),

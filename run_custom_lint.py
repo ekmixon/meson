@@ -20,7 +20,7 @@ def check_missing_encoding(lines: T.List[str], path: str) -> int:
                 continue
 
             # Do we have a match?
-            loc = l.find(func + '(')
+            loc = l.find(f'{func}(')
             if loc < 0:
                 continue
             if loc > 0 and ord(l[loc-1].lower()) in [*range(ord('a'), ord('z')), *range(ord('0'), ord('9')), '_']:
@@ -49,7 +49,7 @@ def check_missing_encoding(lines: T.List[str], path: str) -> int:
                     b_open += 1
 
             binary_modes = ['rb', 'br', 'r+b', 'wb', 'bw', 'ab', 'ba']
-            is_binary = any([f'"{x}"' in args for x in binary_modes])
+            is_binary = any(f'"{x}"' in args for x in binary_modes)
             if 'encoding=' not in args and not (func == 'open' and is_binary):
                 location = f'\x1b[33;1m[\x1b[0;1m{path}:{num+1}\x1b[33m]\x1b[0m'
                 #print(f'{location:<64}: \x1b[31;1mERROR:\x1b[0m Missing `encoding=` parameter in "{line.strip()}"')
@@ -65,7 +65,7 @@ def main() -> int:
         lines = raw.splitlines()
         filename = i.relative_to(root).as_posix()
 
-        if not any([filename.startswith(x) for x in whitelist]):
+        if not any(filename.startswith(x) for x in whitelist):
             continue
 
         errors += check_missing_encoding(lines, filename)

@@ -49,8 +49,8 @@ class AstPrinter(AstVisitor):
 
     def append_padded(self, data: str, node: mparser.BaseNode) -> None:
         if self.result and self.result[-1] not in [' ', '\n']:
-            data = ' ' + data
-        self.append(data + ' ', node)
+            data = f' {data}'
+        self.append(f'{data} ', node)
 
     def newline(self) -> None:
         self.result += '\n'
@@ -127,25 +127,25 @@ class AstPrinter(AstVisitor):
 
     def visit_MethodNode(self, node: mparser.MethodNode) -> None:
         node.source_object.accept(self)
-        self.append('.' + node.name + '(', node)
+        self.append(f'.{node.name}(', node)
         node.args.accept(self)
         self.append(')', node)
 
     def visit_FunctionNode(self, node: mparser.FunctionNode) -> None:
-        self.append(node.func_name + '(', node)
+        self.append(f'{node.func_name}(', node)
         node.args.accept(self)
         self.append(')', node)
 
     def visit_AssignmentNode(self, node: mparser.AssignmentNode) -> None:
-        self.append(node.var_name + ' = ', node)
+        self.append(f'{node.var_name} = ', node)
         node.value.accept(self)
 
     def visit_PlusAssignmentNode(self, node: mparser.PlusAssignmentNode) -> None:
-        self.append(node.var_name + ' += ', node)
+        self.append(f'{node.var_name} += ', node)
         node.value.accept(self)
 
     def visit_ForeachClauseNode(self, node: mparser.ForeachClauseNode) -> None:
-        varnames = [x for x in node.varnames]
+        varnames = list(node.varnames)
         self.append_padded('foreach', node)
         self.append_padded(', '.join(varnames), node)
         self.append_padded(':', node)
@@ -157,7 +157,7 @@ class AstPrinter(AstVisitor):
     def visit_IfClauseNode(self, node: mparser.IfClauseNode) -> None:
         prefix = ''
         for i in node.ifs:
-            self.append_padded(prefix + 'if', node)
+            self.append_padded(f'{prefix}if', node)
             prefix = 'el'
             i.accept(self)
         if not isinstance(node.elseblock, mparser.EmptyNode):

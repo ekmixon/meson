@@ -26,20 +26,18 @@ class Vs2019Backend(Vs2010Backend):
         super().__init__(build, interpreter)
         self.name = 'vs2019'
         if self.environment is not None:
-            comps = self.environment.coredata.compilers.host
-            if comps and all(c.id == 'clang-cl' for c in comps.values()):
-                self.platform_toolset = 'ClangCL'
-            elif comps and all(c.id == 'intel-cl' for c in comps.values()):
-                c = list(comps.values())[0]
-                if c.version.startswith('19'):
-                    self.platform_toolset = 'Intel C++ Compiler 19.0'
-                # We don't have support for versions older than 2019 right now.
+            if comps := self.environment.coredata.compilers.host:
+                if all((c.id == 'clang-cl' for c in comps.values())):
+                    self.platform_toolset = 'ClangCL'
+                elif all((c.id == 'intel-cl' for c in comps.values())):
+                    c = list(comps.values())[0]
+                    if c.version.startswith('19'):
+                        self.platform_toolset = 'Intel C++ Compiler 19.0'
+                    # We don't have support for versions older than 2019 right now.
             if not self.platform_toolset:
                 self.platform_toolset = 'v142'
             self.vs_version = '2019'
-        # WindowsSDKVersion should be set by command prompt.
-        sdk_version = os.environ.get('WindowsSDKVersion', None)
-        if sdk_version:
+        if sdk_version := os.environ.get('WindowsSDKVersion', None):
             self.windows_target_platform_version = sdk_version.rstrip('\\')
 
     def generate_debug_information(self, link):

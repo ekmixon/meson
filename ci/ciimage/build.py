@@ -21,7 +21,7 @@ class ImageDef:
         data = json.loads(path.read_text(encoding='utf-8'))
 
         assert isinstance(data, dict)
-        assert all([x in data for x in ['base_image', 'env']])
+        assert all(x in data for x in ['base_image', 'env'])
         assert isinstance(data['base_image'], str)
         assert isinstance(data['env'],  dict)
 
@@ -63,16 +63,16 @@ class BuilderBase():
 class Builder(BuilderBase):
     def gen_bashrc(self) -> None:
         out_file = self.temp_dir / 'env_vars.sh'
-        out_data = ''
-
         # run_tests.py parameters
         self.image_def.env['CI_ARGS'] = ' '.join(self.image_def.args)
 
-        for key, val in self.image_def.env.items():
-            out_data += f'export {key}="{val}"\n'
-
-        # Also add /ci to PATH
-        out_data += 'export PATH="/ci:$PATH"\n'
+        out_data = (
+            ''.join(
+                f'export {key}="{val}"\n'
+                for key, val in self.image_def.env.items()
+            )
+            + 'export PATH="/ci:$PATH"\n'
+        )
 
         out_file.write_text(out_data, encoding='utf-8')
 

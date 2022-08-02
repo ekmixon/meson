@@ -119,7 +119,7 @@ class CompilerArgs(collections.abc.MutableSequence):
     # This correctly deduplicates the entries after _can_dedup definition
     # Note: This function is designed to work without delete operations, as deletions are worsening the performance a lot.
     def flush_pre_post(self) -> None:
-        new = list()                      # type: T.List[str]
+        new = []
         pre_flush_set = set()             # type: T.Set[str]
         post_flush = collections.deque()  # type: T.Deque[str]
         post_flush_set = set()            # type: T.Set[str]
@@ -141,9 +141,12 @@ class CompilerArgs(collections.abc.MutableSequence):
         #pre and post will overwrite every element that is in the container
         #only copy over args that are in _container but not in the post flush or pre flush set
         if pre_flush_set or post_flush_set:
-            for a in self._container:
-                if a not in post_flush_set and a not in pre_flush_set:
-                    new.append(a)
+            new.extend(
+                a
+                for a in self._container
+                if a not in post_flush_set and a not in pre_flush_set
+            )
+
         else:
             new.extend(self._container)
         new.extend(post_flush)
@@ -217,13 +220,13 @@ class CompilerArgs(collections.abc.MutableSequence):
         if arg in cls.dedup2_prefixes:
             return Dedup.NO_DEDUP
         if arg in cls.dedup2_args or \
-           arg.startswith(cls.dedup2_prefixes) or \
-           arg.endswith(cls.dedup2_suffixes):
+               arg.startswith(cls.dedup2_prefixes) or \
+               arg.endswith(cls.dedup2_suffixes):
             return Dedup.OVERRIDDEN
         if arg in cls.dedup1_args or \
-           arg.startswith(cls.dedup1_prefixes) or \
-           arg.endswith(cls.dedup1_suffixes) or \
-           re.search(cls.dedup1_regex, arg):
+               arg.startswith(cls.dedup1_prefixes) or \
+               arg.endswith(cls.dedup1_suffixes) or \
+               re.search(cls.dedup1_regex, arg):
             return Dedup.UNIQUE
         return Dedup.NO_DEDUP
 
@@ -238,10 +241,7 @@ class CompilerArgs(collections.abc.MutableSequence):
         # needed by static libraries that are provided by object files or
         # shared libraries.
         self.flush_pre_post()
-        if copy:
-            new = self.copy()
-        else:
-            new = self
+        new = self.copy() if copy else self
         return self.compiler.unix_args_to_native(new._container)
 
     def append_direct(self, arg: str) -> None:
@@ -296,10 +296,10 @@ class CompilerArgs(collections.abc.MutableSequence):
             # previous occurrence of it and adding a new one, or not adding the
             # new occurrence.
             dedup = self._can_dedup(arg)
-            if dedup is Dedup.UNIQUE:
-                # Argument already exists and adding a new instance is useless
-                if arg in self._container or arg in self.pre or arg in self.post:
-                    continue
+            if dedup is Dedup.UNIQUE and (
+                arg in self._container or arg in self.pre or arg in self.post
+            ):
+                continue
             if self._should_prepend(arg):
                 tmp_pre.appendleft(arg)
             else:

@@ -36,12 +36,14 @@ def _windows_ansi() -> bool:
     kernel = windll.kernel32
     stdout = kernel.GetStdHandle(-11)
     mode = DWORD()
-    if not kernel.GetConsoleMode(stdout, byref(mode)):
-        return False
-    # ENABLE_VIRTUAL_TERMINAL_PROCESSING == 0x4
-    # If the call to enable VT processing fails (returns 0), we fallback to
-    # original behavior
-    return bool(kernel.SetConsoleMode(stdout, mode.value | 0x4) or os.environ.get('ANSICON'))
+    return (
+        bool(
+            kernel.SetConsoleMode(stdout, mode.value | 0x4)
+            or os.environ.get('ANSICON')
+        )
+        if kernel.GetConsoleMode(stdout, byref(mode))
+        else False
+    )
 
 def colorize_console() -> bool:
     _colorize_console = getattr(sys.stdout, 'colorize_console', None)  # type: bool
@@ -215,7 +217,7 @@ def force_print(*args: str, nested: str, **kwargs: T.Any) -> None:
 
     raw = iostr.getvalue()
     if log_depth:
-        prepend = log_depth[-1] + '| ' if nested else ''
+        prepend = f'{log_depth[-1]}| ' if nested else ''
         lines = []
         for l in raw.split('\n'):
             l = l.strip()
@@ -240,7 +242,7 @@ def _debug_log_cmd(cmd: str, args: T.List[str]) -> None:
     if not _in_ci:
         return
     args = [f'"{x}"' for x in args]  # Quote all args, just in case
-    debug('!meson_ci!/{} {}'.format(cmd, ' '.join(args)))
+    debug(f"!meson_ci!/{cmd} {' '.join(args)}")
 
 def cmd_ci_include(file: str) -> None:
     _debug_log_cmd('ci_include', [file])
@@ -275,9 +277,8 @@ def log_once(*args: TV_Loggable, is_error: bool = False,
     def to_str(x: TV_Loggable) -> str:
         if isinstance(x, str):
             return x
-        if isinstance(x, AnsiDecorator):
-            return x.text
-        return str(x)
+        return x.text if isinstance(x, AnsiDecorator) else str(x)
+
     t = tuple(to_str(a) for a in args)
     if t in _logged_once:
         return
@@ -300,16 +301,16 @@ def _log_error(severity: str, *rargs: TV_Loggable,
 
     # The typing requirements here are non-obvious. Lists are invariant,
     # therefore T.List[A] and T.List[T.Union[A, B]] are not able to be joined
-    if severity == 'notice':
+    if severity == 'deprecation':
+        label = [red('DEPRECATION:')]
+    elif severity == 'error':
+        label = [red('ERROR:')]
+    elif severity == 'notice':
         label = [bold('NOTICE:')]  # type: TV_LoggableList
     elif severity == 'warning':
         label = [yellow('WARNING:')]
-    elif severity == 'error':
-        label = [red('ERROR:')]
-    elif severity == 'deprecation':
-        label = [red('DEPRECATION:')]
     else:
-        raise MesonException('Invalid severity ' + severity)
+        raise MesonException(f'Invalid severity {severity}')
     # rargs is a tuple, not a list
     args = label + list(rargs)
 

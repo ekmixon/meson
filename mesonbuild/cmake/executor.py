@@ -64,7 +64,7 @@ class CMakeExecutor:
 
         self.prefix_paths = self.environment.coredata.options[OptionKey('cmake_prefix_path', machine=self.for_machine)].value
         if self.prefix_paths:
-            self.extra_cmake_args += ['-DCMAKE_PREFIX_PATH={}'.format(';'.join(self.prefix_paths))]
+            self.extra_cmake_args += [f"-DCMAKE_PREFIX_PATH={';'.join(self.prefix_paths)}"]
 
     def find_cmake_binary(self, environment: Environment, silent: bool = False) -> T.Tuple[T.Optional['ExternalProgram'], T.Optional[str]]:
         # Only search for CMake the first time and store the result in the class
@@ -106,7 +106,7 @@ class CMakeExecutor:
             mlog.log(f'Did not find CMake {cmakebin.name!r}')
             return None
         try:
-            p, out = Popen_safe(cmakebin.get_command() + ['--version'])[0:2]
+            p, out = Popen_safe(cmakebin.get_command() + ['--version'])[:2]
             if p.returncode != 0:
                 mlog.warning('Found CMake {!r} but couldn\'t run it'
                              ''.format(' '.join(cmakebin.get_command())))
@@ -121,8 +121,7 @@ class CMakeExecutor:
                 msg += '\n\nOn Unix-like systems this is often caused by scripts that are not executable.'
             mlog.warning(msg)
             return None
-        cmvers = re.search(r'(cmake|cmake3)\s*version\s*([\d.]+)', out).group(2)
-        return cmvers
+        return re.search(r'(cmake|cmake3)\s*version\s*([\d.]+)', out)[2]
 
     def set_exec_mode(self, print_cmout: T.Optional[bool] = None, always_capture_stderr: T.Optional[bool] = None) -> None:
         if print_cmout is not None:
@@ -182,10 +181,10 @@ class CMakeExecutor:
         cmd = self.cmakebin.get_command() + args
         proc = S.Popen(cmd, stdout=S.PIPE, stderr=S.STDOUT, cwd=str(build_dir), env=env)  # TODO [PYTHON_37]: drop Path conversion
         while True:
-            line = proc.stdout.readline()
-            if not line:
+            if line := proc.stdout.readline():
+                mlog.log(line.decode(errors='ignore').strip('\n'))
+            else:
                 break
-            mlog.log(line.decode(errors='ignore').strip('\n'))
         proc.stdout.close()
         proc.wait()
         return proc.returncode, None, None
@@ -206,11 +205,10 @@ class CMakeExecutor:
             mlog.debug(f'  - "{i}"')
         if not self.print_cmout:
             return self._call_quiet(args, build_dir, env)
+        if self.always_capture_stderr:
+            return self._call_cmout_stderr(args, build_dir, env)
         else:
-            if self.always_capture_stderr:
-                return self._call_cmout_stderr(args, build_dir, env)
-            else:
-                return self._call_cmout(args, build_dir, env)
+            return self._call_cmout(args, build_dir, env)
 
     def call(self, args: T.List[str], build_dir: Path, env: T.Optional[T.Dict[str, str]] = None, disable_cache: bool = False) -> TYPE_result:
         if env is None:

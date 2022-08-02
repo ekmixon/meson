@@ -83,7 +83,7 @@ class AstIDGenerator(AstVisitor):
         name = type(node).__name__
         if name not in self.counter:
             self.counter[name] = 0
-        node.ast_id = name + '#' + str(self.counter[name])
+        node.ast_id = f'{name}#{str(self.counter[name])}'
         self.counter[name] += 1
 
 class AstConditionLevel(AstVisitor):

@@ -94,11 +94,7 @@ class DirMaker:
     def makedirs(self, path: str, exist_ok: bool = False) -> None:
         dirname = os.path.normpath(path)
         dirs = []
-        while dirname != os.path.dirname(dirname):
-            if dirname in self.dirs:
-                # In dry-run mode the directory does not exist but we would have
-                # created it with all its parents otherwise.
-                break
+        while dirname != os.path.dirname(dirname) and dirname not in self.dirs:
             if not os.path.exists(dirname):
                 dirs.append(dirname)
             dirname = os.path.dirname(dirname)
@@ -201,11 +197,10 @@ def set_mode(path: str, mode: T.Optional['FileMode'], default_umask: T.Union[str
             msg = '{!r}: Non-existent owner {!r} or group {!r}: ignoring...'
             print(msg.format(path, mode.owner, mode.group))
         except OSError as e:
-            if e.errno == errno.EINVAL:
-                msg = '{!r}: Non-existent numeric owner {!r} or group {!r}: ignoring...'
-                print(msg.format(path, mode.owner, mode.group))
-            else:
+            if e.errno != errno.EINVAL:
                 raise
+            msg = '{!r}: Non-existent numeric owner {!r} or group {!r}: ignoring...'
+            print(msg.format(path, mode.owner, mode.group))
     # Must set permissions *after* setting owner/group otherwise the
     # setuid/setgid bits will get wiped by chmod
     # NOTE: On Windows you can set read/write perms; the rest are ignored
@@ -240,7 +235,10 @@ def restore_selinux_contexts() -> None:
         # If the list of files is empty, do not try to call restorecon.
         return
 
-    proc, out, err = Popen_safe(['restorecon', '-F', '-f-', '-0'], ('\0'.join(f for f in selinux_updates) + '\0'))
+    proc, out, err = Popen_safe(
+        ['restorecon', '-F', '-f-', '-0'], '\0'.join(selinux_updates) + '\0'
+    )
+
     if proc.returncode != 0 :
         print('Failed to restore SELinux context of installed files...',
               'Standard output:', out,
@@ -261,11 +259,11 @@ def apply_ldconfig() -> None:
               'Standard error:', err, sep='\n')
 
 def get_destdir_path(destdir: str, fullprefix: str, path: str) -> str:
-    if os.path.isabs(path):
-        output = destdir_join(destdir, path)
-    else:
-        output = os.path.join(fullprefix, path)
-    return output
+    return (
+        destdir_join(destdir, path)
+        if os.path.isabs(path)
+        else os.path.join(fullprefix, path)
+    )
 
 
 def check_for_stampfile(fname: str) -> str:
@@ -276,7 +274,7 @@ def check_for_stampfile(fname: str) -> str:
     if fname.endswith('.so') or fname.endswith('.dll'):
         if os.stat(fname).st_size == 0:
             (base, suffix) = os.path.splitext(fname)
-            files = glob(base + '-*' + suffix)
+            files = glob(f'{base}-*{suffix}')
             if len(files) > 1:
                 print("Stale dynamic library files in build dir. Can't install.")
                 sys.exit(1)
@@ -285,7 +283,7 @@ def check_for_stampfile(fname: str) -> str:
     elif fname.endswith('.a') or fname.endswith('.lib'):
         if os.stat(fname).st_size == 0:
             (base, suffix) = os.path.splitext(fname)
-            files = glob(base + '-*' + '.rlib')
+            files = glob(f'{base}-*.rlib')
             if len(files) > 1:
                 print("Stale static library files in build dir. Can't install.")
                 sys.exit(1)
@@ -371,16 +369,12 @@ class Installer:
         return 0, '', ''
 
     def run_exe(self, *args: T.Any, **kwargs: T.Any) -> int:
-        if not self.dry_run:
-            return run_exe(*args, **kwargs)
-        return 0
+        return 0 if self.dry_run else run_exe(*args, **kwargs)
 
     def should_install(self, d: T.Union[TargetInstallData, InstallDataBase, ExecutableSerialisation]) -> bool:
         if d.subproject and (d.subproject in self.skip_subprojects or '*' in self.skip_subprojects):
             return False
-        if self.tags and d.tag not in self.tags:
-            return False
-        return True
+        return not self.tags or d.tag in self.tags
 
     def log(self, msg: str) -> None:
         if not self.options.quiet:
@@ -545,16 +539,21 @@ class Installer:
                 if not self.did_install_something:
                     self.log('Nothing to install.')
                 if not self.options.quiet and self.preserved_file_count > 0:
-                    self.log('Preserved {} unchanged files, see {} for the full list'
-                             .format(self.preserved_file_count, os.path.normpath(self.lf.name)))
+                    self.log(
+                        f'Preserved {self.preserved_file_count} unchanged files, see {os.path.normpath(self.lf.name)} for the full list'
+                    )
+
         except PermissionError:
-            if shutil.which('pkexec') is not None and 'PKEXEC_UID' not in os.environ and destdir == '':
-                print('Installation failed due to insufficient permissions.')
-                print('Attempting to use polkit to gain elevated privileges...')
-                os.execlp('pkexec', 'pkexec', sys.executable, main_file, *sys.argv[1:],
-                          '-C', os.getcwd())
-            else:
+            if (
+                shutil.which('pkexec') is None
+                or 'PKEXEC_UID' in os.environ
+                or destdir != ''
+            ):
                 raise
+            print('Installation failed due to insufficient permissions.')
+            print('Attempting to use polkit to gain elevated privileges...')
+            os.execlp('pkexec', 'pkexec', sys.executable, main_file, *sys.argv[1:],
+                      '-C', os.getcwd())
 
     def install_subdirs(self, d: InstallData, dm: DirMaker, destdir: str, fullprefix: str) -> None:
         for i in d.install_subdirs:
@@ -634,12 +633,10 @@ class Installer:
             if not self.should_install(t):
                 continue
             if not os.path.exists(t.fname):
-                # For example, import libraries of shared modules are optional
-                if t.optional:
-                    self.log(f'File {t.fname!r} not found, skipping')
-                    continue
-                else:
+                if not t.optional:
                     raise RuntimeError(f'File {t.fname!r} could not be found')
+                self.log(f'File {t.fname!r} not found, skipping')
+                continue
             file_copied = False # not set when a directory is copied
             fname = check_for_stampfile(t.fname)
             outdir = get_destdir_path(destdir, fullprefix, t.outdir)
@@ -657,7 +654,7 @@ class Installer:
                 self.set_mode(outname, install_mode, d.install_umask)
                 if should_strip and d.strip_bin is not None:
                     if fname.endswith('.jar'):
-                        self.log('Not stripping jar target: {}'.format(os.path.basename(fname)))
+                        self.log(f'Not stripping jar target: {os.path.basename(fname)}')
                         continue
                     self.log('Stripping target {!r} using {}.'.format(fname, d.strip_bin[0]))
                     returncode, stdo, stde = self.Popen_safe(d.strip_bin + [outname])
@@ -669,9 +666,9 @@ class Installer:
                 if fname.endswith('.js'):
                     # Emscripten outputs js files and optionally a wasm file.
                     # If one was generated, install it as well.
-                    wasm_source = os.path.splitext(fname)[0] + '.wasm'
+                    wasm_source = f'{os.path.splitext(fname)[0]}.wasm'
                     if os.path.exists(wasm_source):
-                        wasm_output = os.path.splitext(outname)[0] + '.wasm'
+                        wasm_output = f'{os.path.splitext(outname)[0]}.wasm'
                         file_copied = self.do_copyfile(wasm_source, wasm_output)
             elif os.path.isdir(fname):
                 fname = os.path.join(d.build_dir, fname.rstrip('/'))
@@ -701,9 +698,7 @@ class Installer:
                     self.fix_rpath(outname, t.rpath_dirs_to_remove, install_rpath, final_path,
                                          install_name_mappings, verbose=False)
                 except SystemExit as e:
-                    if isinstance(e.code, int) and e.code == 0:
-                        pass
-                    else:
+                    if not isinstance(e.code, int) or e.code != 0:
                         raise
 
 
@@ -731,9 +726,8 @@ def run(opts: 'ArgumentType') -> int:
     log_dir = os.path.join(private_dir, '../meson-logs')
     if not os.path.exists(os.path.join(opts.wd, datafilename)):
         sys.exit('Install data not found. Run this command in build directory root.')
-    if not opts.no_rebuild:
-        if not rebuild_all(opts.wd):
-            sys.exit(-1)
+    if not opts.no_rebuild and not rebuild_all(opts.wd):
+        sys.exit(-1)
     os.chdir(opts.wd)
     with open(os.path.join(log_dir, 'install-log.txt'), 'w', encoding='utf-8') as lf:
         installer = Installer(opts, lf)

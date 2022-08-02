@@ -199,10 +199,7 @@ class MesonApp:
         b = build.Build(env)
 
         intr = interpreter.Interpreter(b)
-        if env.is_cross_build():
-            logger_fun = mlog.log
-        else:
-            logger_fun = mlog.debug
+        logger_fun = mlog.log if env.is_cross_build() else mlog.debug
         build_machine = intr.builtin['build_machine']
         host_machine = intr.builtin['host_machine']
         target_machine = intr.builtin['target_machine']
@@ -226,9 +223,14 @@ class MesonApp:
             raise
         # Print all default option values that don't match the current value
         for def_opt_name, def_opt_value, cur_opt_value in intr.get_non_matching_default_options():
-            mlog.log('Option', mlog.bold(def_opt_name), 'is:',
-                     mlog.bold('{}'.format(make_lower_case(cur_opt_value.printable_value()))),
-                     '[default: {}]'.format(make_lower_case(def_opt_value)))
+            mlog.log(
+                'Option',
+                mlog.bold(def_opt_name),
+                'is:',
+                mlog.bold(f'{make_lower_case(cur_opt_value.printable_value())}'),
+                f'[default: {make_lower_case(def_opt_value)}]',
+            )
+
         try:
             dumpfile = os.path.join(env.get_scratch_dir(), 'build.dat')
             # We would like to write coredata as late as possible since we use the existence of
@@ -268,7 +270,7 @@ class MesonApp:
         except Exception as e:
             mintro.write_meson_info_file(b, [e])
             if 'cdf' in locals():
-                old_cdf = cdf + '.prev'
+                old_cdf = f'{cdf}.prev'
                 if os.path.exists(old_cdf):
                     os.replace(old_cdf, cdf)
                 else:

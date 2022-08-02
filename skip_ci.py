@@ -38,7 +38,10 @@ def get_base_branch(base_env):
 
 
 def get_git_files(base):
-    diff = subprocess.check_output(['git', 'diff', '--name-only', base + '...HEAD'])
+    diff = subprocess.check_output(
+        ['git', 'diff', '--name-only', f'{base}...HEAD']
+    )
+
     return diff.strip().split(b'\n')
 
 
@@ -59,7 +62,7 @@ def main():
         check_pr(args.is_pull_env)
         base = get_base_branch(args.base_branch_env)
         if args.base_branch_origin:
-            base = 'origin/' + base
+            base = f'origin/{base}'
         if all(is_documentation(f) for f in get_git_files(base)):
             print("Don't run CI for documentation-only changes, add '[skip ci]' to commit title.")
             print('See http://mesonbuild.com/Contributing.html#skipping-integration-tests')

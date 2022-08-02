@@ -27,7 +27,11 @@ if T.TYPE_CHECKING:
     from .interpreterbase import TV_func
 
 forbidden_option_names = set(coredata.BUILTIN_OPTIONS.keys())
-forbidden_prefixes = [lang + '_' for lang in compilers.all_languages] + ['b_', 'backend_']
+forbidden_prefixes = [f'{lang}_' for lang in compilers.all_languages] + [
+    'b_',
+    'backend_',
+]
+
 reserved_prefixes = ['cross_']
 
 def is_invalid_name(name: str, *, log: bool = True) -> bool:
@@ -36,9 +40,8 @@ def is_invalid_name(name: str, *, log: bool = True) -> bool:
     pref = name.split('_')[0] + '_'
     if pref in forbidden_prefixes:
         return True
-    if pref in reserved_prefixes:
-        if log:
-            mlog.deprecation('Option uses prefix "%s", which is reserved for Meson. This will become an error in the future.' % pref)
+    if pref in reserved_prefixes and log:
+        mlog.deprecation('Option uses prefix "%s", which is reserved for Meson. This will become an error in the future.' % pref)
     return False
 
 class OptionException(mesonlib.MesonException):
@@ -226,7 +229,7 @@ class OptionInterpreter:
         if optname_regex.search(opt_name) is not None:
             raise OptionException('Option names can only contain letters, numbers or dashes.')
         if is_invalid_name(opt_name):
-            raise OptionException('Option name %s is reserved.' % opt_name)
+            raise OptionException(f'Option name {opt_name} is reserved.')
         key = mesonlib.OptionKey(opt_name, self.subproject)
 
         if 'yield' in kwargs:
@@ -238,7 +241,7 @@ class OptionInterpreter:
         if not isinstance(opt_type, str):
             raise OptionException('option() type must be a string')
         if opt_type not in option_types:
-            raise OptionException('Unknown type %s.' % opt_type)
+            raise OptionException(f'Unknown type {opt_type}.')
 
         description = kwargs.pop('description', '')
         if not isinstance(description, str):

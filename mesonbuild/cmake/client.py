@@ -119,9 +119,8 @@ class MessageHello(MessageBase):
         for i in self.supported_protocol_versions:
             assert 'major' in i
             assert 'minor' in i
-            if major == i['major']:
-                if minor is None or minor == i['minor']:
-                    return True
+            if major == i['major'] and (minor is None or minor == i['minor']):
+                return True
         return False
 
 # Request classes
@@ -207,9 +206,7 @@ class ReplyCMakeInputs(ReplyBase):
 class ReplyCodeModel(ReplyBase):
     def __init__(self, data: T.Dict[str, T.Any]) -> None:
         super().__init__(data['cookie'], 'codemodel')
-        self.configs = []
-        for i in data['configurations']:
-            self.configs += [CMakeConfiguration(i)]
+        self.configs = [CMakeConfiguration(i) for i in data['configurations']]
 
     def log(self) -> None:
         mlog.log('CMake code mode:')
@@ -297,7 +294,7 @@ class CMakeClient:
     def query_checked(self, request: RequestBase, message: str) -> MessageBase:
         reply = self.query(request)
         h = mlog.green('SUCCEEDED') if reply.type == 'reply' else mlog.red('FAILED')
-        mlog.log(message + ':', h)
+        mlog.log(f'{message}:', h)
         if reply.type != 'reply':
             reply.log()
             raise CMakeException('CMake server query failed')

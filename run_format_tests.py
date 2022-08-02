@@ -65,13 +65,14 @@ def check_format() -> None:
         'venv',                         # virtualenvs have DOS line endings
     }
     for (root, _, filenames) in os.walk('.'):
-        if any([x in root for x in skip_dirs]):
+        if any(x in root for x in skip_dirs):
             continue
         for fname in filenames:
             file = Path(fname)
-            if file.suffix.lower() in check_suffixes:
-                if file.name in ('sitemap.txt', 'meson-test-run.txt'):
-                    continue
+            if file.suffix.lower() in check_suffixes and file.name not in (
+                'sitemap.txt',
+                'meson-test-run.txt',
+            ):
                 check_file(root / file)
 
 

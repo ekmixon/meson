@@ -142,13 +142,13 @@ class Properties:
         self.properties = properties or {}  # type: T.Dict[str, T.Optional[T.Union[str, bool, int, T.List[str]]]]
 
     def has_stdlib(self, language: str) -> bool:
-        return language + '_stdlib' in self.properties
+        return f'{language}_stdlib' in self.properties
 
     # Some of get_stdlib, get_root, get_sys_root are wider than is actually
     # true, but without heterogenious dict annotations it's not practical to
     # narrow them
     def get_stdlib(self, language: str) -> T.Union[str, T.List[str]]:
-        stdlib = self.properties[language + '_stdlib']
+        stdlib = self.properties[f'{language}_stdlib']
         if isinstance(stdlib, str):
             return stdlib
         assert isinstance(stdlib, list)
@@ -201,8 +201,8 @@ class Properties:
             return CMakeSkipCompilerTest(raw)
         except ValueError:
             raise EnvironmentException(
-                '"{}" is not a valid value for cmake_skip_compiler_test. Supported values are {}'
-                .format(raw, [e.value for e in CMakeSkipCompilerTest]))
+                f'"{raw}" is not a valid value for cmake_skip_compiler_test. Supported values are {[e.value for e in CMakeSkipCompilerTest]}'
+            )
 
     def get_cmake_use_exe_wrapper(self) -> bool:
         if 'cmake_use_exe_wrapper' not in self.properties:
@@ -241,18 +241,21 @@ class MachineInfo(HoldableObject):
         self.is_64_bit = cpu_family in CPU_FAMILIES_64_BIT  # type: bool
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, MachineInfo):
-            return NotImplemented
-        return \
-            self.system == other.system and \
-            self.cpu_family == other.cpu_family and \
-            self.cpu == other.cpu and \
-            self.endian == other.endian
+        return (
+            self.system == other.system
+            and self.cpu_family == other.cpu_family
+            and self.cpu == other.cpu
+            and self.endian == other.endian
+            if isinstance(other, MachineInfo)
+            else NotImplemented
+        )
 
     def __ne__(self, other: object) -> bool:
-        if not isinstance(other, MachineInfo):
-            return NotImplemented
-        return not self.__eq__(other)
+        return (
+            not self.__eq__(other)
+            if isinstance(other, MachineInfo)
+            else NotImplemented
+        )
 
     def __repr__(self) -> str:
         return f'<MachineInfo: {self.system} {self.cpu_family} ({self.cpu})>'
@@ -262,8 +265,12 @@ class MachineInfo(HoldableObject):
         minimum_literal = {'cpu', 'cpu_family', 'endian', 'system'}
         if set(literal) < minimum_literal:
             raise EnvironmentException(
-                f'Machine info is currently {literal}\n' +
-                'but is missing {}.'.format(minimum_literal - set(literal)))
+                (
+                    f'Machine info is currently {literal}\n'
+                    + f'but is missing {minimum_literal - set(literal)}.'
+                )
+            )
+
 
         cpu_family = literal['cpu_family']
         if cpu_family not in known_cpu_families:
@@ -349,16 +356,10 @@ class MachineInfo(HoldableObject):
     # static libraries, and executables.
     # Versioning is added to these names in the backends as-needed.
     def get_exe_suffix(self) -> str:
-        if self.is_windows() or self.is_cygwin():
-            return 'exe'
-        else:
-            return ''
+        return 'exe' if self.is_windows() or self.is_cygwin() else ''
 
     def get_object_suffix(self) -> str:
-        if self.is_windows():
-            return 'obj'
-        else:
-            return 'o'
+        return 'obj' if self.is_windows() else 'o'
 
     def libdir_layout_is_win(self) -> bool:
         return self.is_windows() or self.is_cygwin()
@@ -404,11 +405,7 @@ class BinaryTable:
         found.
         """
         command = self.binaries.get(name)
-        if not command:
-            return None
-        elif not command[0].strip():
-            return None
-        return command
+        return None if not command or command and not command[0].strip() else command
 
 class CMakeVariables:
     def __init__(self, variables: T.Optional[T.Dict[str, T.Any]] = None) -> None:

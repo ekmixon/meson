@@ -32,7 +32,7 @@ def parse(lines):
                 out += c
                 escape = None
                 continue
-            if c == '\\' or c == '$':
+            if c in ['\\', '$']:
                 escape = c
                 continue
             elif c in (' ', '\n'):

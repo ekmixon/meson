@@ -169,7 +169,7 @@ class Conf:
 
     def add_option(self, name, descr, value, choices):
         if isinstance(value, list):
-            value = '[{}]'.format(', '.join(make_lower_case(value)))
+            value = f"[{', '.join(make_lower_case(value))}]"
         else:
             value = make_lower_case(value)
 
@@ -181,7 +181,7 @@ class Conf:
                 while choices_list:
                     i = choices_list.pop(0)
                     if len(current) + len(i) >= self.max_choices_line_length:
-                        self._add_line(name, value, current + ',', descr)
+                        self._add_line(name, value, f'{current},', descr)
                         name = ''
                         value = ''
                         descr = ''
@@ -189,7 +189,7 @@ class Conf:
                     if len(current) > 1:
                         current += ', '
                     current += i
-                choices = current + ']'
+                choices = f'{current}]'
             else:
                 choices = make_lower_case(choices)
         else:
@@ -208,7 +208,7 @@ class Conf:
     def add_section(self, section):
         self.print_margin = 0
         self._add_line('', '', '', '')
-        self._add_line(section + ':', '', '', '')
+        self._add_line(f'{section}:', '', '', '')
         self.print_margin = 2
 
     def print_options(self, title: str, options: 'coredata.KeyedOptionDictType') -> None:
@@ -273,7 +273,7 @@ class Conf:
         for subproject in sorted(self.all_subprojects):
             if subproject == '':
                 continue
-            self.add_section('Subproject ' + subproject)
+            self.add_section(f'Subproject {subproject}')
             if subproject in host_core_options:
                 self.print_options('Core options', host_core_options[subproject])
             if subproject in build_core_options and show_build_options:
@@ -298,7 +298,7 @@ class Conf:
         if not mismatching:
             return
         print("\nThe following option(s) have a different value than the build type default\n")
-        print(f'               current   default')
+        print('               current   default')
         for m in mismatching:
             print(f'{m[0]:21}{m[1]:10}{m[2]:10}')
 

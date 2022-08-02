@@ -123,7 +123,7 @@ known_jar_kwargs = known_exe_kwargs | {'main_class'}
 def get_target_macos_dylib_install_name(ld) -> str:
     name = ['@rpath/', ld.prefix, ld.name]
     if ld.soversion is not None:
-        name.append('.' + ld.soversion)
+        name.append(f'.{ld.soversion}')
     name.append('.dylib')
     return ''.join(name)
 
@@ -313,9 +313,7 @@ class Build:
     def get_project_args(self, compiler: 'Compiler', project: str, for_machine: 'MachineChoice') -> T.List[str]:
         d = self.projects_args[for_machine]
         args = d.get(project)
-        if not args:
-            return []
-        return args.get(compiler.get_language(), [])
+        return args.get(compiler.get_language(), []) if args else []
 
     def get_global_link_args(self, compiler: 'Compiler', for_machine: 'MachineChoice') -> T.List[str]:
         d = self.global_link_args[for_machine]
@@ -325,10 +323,7 @@ class Build:
         d = self.projects_link_args[for_machine]
 
         link_args = d.get(project)
-        if not link_args:
-            return []
-
-        return link_args.get(compiler.get_language(), [])
+        return link_args.get(compiler.get_language(), []) if link_args else []
 
 class IncludeDirs(HoldableObject):
 
@@ -358,10 +353,7 @@ class IncludeDirs(HoldableObject):
 
     def to_string_list(self, sourcedir: str) -> T.List[str]:
         """Convert IncludeDirs object to a list of strings."""
-        strlist: T.List[str] = []
-        for idir in self.incdirs:
-            strlist.append(os.path.join(sourcedir, self.curdir, idir))
-        return strlist
+        return [os.path.join(sourcedir, self.curdir, idir) for idir in self.incdirs]
 
 class ExtractedObjects(HoldableObject):
     '''
@@ -390,12 +382,7 @@ class ExtractedObjects(HoldableObject):
         # Merge sources and generated sources
         sources = list(sources)
         for gensrc in generated_sources:
-            for s in gensrc.get_outputs():
-                # We cannot know the path where this source will be generated,
-                # but all we need here is the file extension to determine the
-                # compiler.
-                sources.append(s)
-
+            sources.extend(iter(gensrc.get_outputs()))
         # Filter out headers and all non-source files
         return [s for s in sources if environment.is_source(s) and not environment.is_header(s)]
 
@@ -571,7 +558,7 @@ class Target(HoldableObject):
         if subdir:
             subdir_part = Target._get_id_hash(subdir)
             # preserve myid for better debuggability
-            return subdir_part + '@@' + my_id
+            return f'{subdir_part}@@{my_id}'
         return my_id
 
     def get_id(self) -> str:
@@ -687,12 +674,10 @@ class BuildTarget(Target):
         self.check_unknown_kwargs_int(kwargs, self.known_kwargs)
 
     def check_unknown_kwargs_int(self, kwargs, known_kwargs):
-        unknowns = []
-        for k in kwargs:
-            if k not in known_kwargs:
-                unknowns.append(k)
-        if len(unknowns) > 0:
-            mlog.warning('Unknown keyword argument(s) in target {}: {}.'.format(self.name, ', '.join(unknowns)))
+        if unknowns := [k for k in kwargs if k not in known_kwargs]:
+            mlog.warning(
+                f"Unknown keyword argument(s) in target {self.name}: {', '.join(unknowns)}."
+            )
 
     def process_objectlist(self, objects):
         assert isinstance(objects, list)
@@ -753,7 +738,7 @@ class BuildTarget(Target):
         if self.link_targets or self.link_whole_targets:
             extra = set()
             for t in itertools.chain(self.link_targets, self.link_whole_targets):
-                if isinstance(t, CustomTarget) or isinstance(t, CustomTargetIndex):
+                if isinstance(t, (CustomTarget, CustomTargetIndex)):
                     continue # We can't know anything about these.
                 for name, compiler in t.compilers.items():
                     if name in link_langs:
@@ -793,10 +778,7 @@ class BuildTarget(Target):
                 if not is_object(s):
                     sources.append(s)
         for d in self.external_deps:
-            for s in d.sources:
-                if isinstance(s, (str, File)):
-                    sources.append(s)
-
+            sources.extend(s for s in d.sources if isinstance(s, (str, File)))
         # Sources that were used to create our extracted objects
         for o in self.objects:
             if not isinstance(o, ExtractedObjects):
@@ -824,8 +806,10 @@ class BuildTarget(Target):
                         break
                 else:
                     if is_known_suffix(s):
-                        raise MesonException('No {} machine compiler for "{}"'.
-                                             format(self.for_machine.get_lower_case_name(), s))
+                        raise MesonException(
+                            f'No {self.for_machine.get_lower_case_name()} machine compiler for "{s}"'
+                        )
+
 
             # Re-sort according to clink_langs
             self.compilers = OrderedDict(sorted(self.compilers.items(),
@@ -846,8 +830,10 @@ class BuildTarget(Target):
                 if not self.can_compile_remove_sources(compiler, check_sources):
                     raise InvalidArguments(f'No {lang} sources found in target {self.name!r}')
                 if check_sources:
-                    m = '{0} targets can only contain {0} files:\n'.format(lang.capitalize())
-                    m += '\n'.join([repr(c) for c in check_sources])
+                    m = '{0} targets can only contain {0} files:\n'.format(
+                        lang.capitalize()
+                    ) + '\n'.join([repr(c) for c in check_sources])
+
                     raise InvalidArguments(m)
                 # CSharp and Java targets can't contain any other file types
                 assert len(self.compilers) == 1

@@ -29,18 +29,18 @@ def add_arguments(parser):
 
 def dump_compilers(compilers):
     for lang, compiler in compilers.items():
-        print('  ' + lang + ':')
-        print('      Id: ' + compiler.id)
+        print(f'  {lang}:')
+        print(f'      Id: {compiler.id}')
         print('      Command: ' + ' '.join(compiler.exelist))
         if compiler.full_version:
-            print('      Full version: ' + compiler.full_version)
+            print(f'      Full version: {compiler.full_version}')
         if compiler.version:
-            print('      Detected version: ' + compiler.version)
+            print(f'      Detected version: {compiler.version}')
 
 
 def dump_guids(d):
     for name, value in d.items():
-        print('  ' + name + ': ' + value)
+        print(f'  {name}: {value}')
 
 
 def run(options):
@@ -66,22 +66,22 @@ def run(options):
             pass
         elif k in ['install_guid', 'test_guid', 'regen_guid']:
             if all_backends or backend.startswith('vs'):
-                print(k + ': ' + v)
+                print(f'{k}: {v}')
         elif k == 'target_guids':
             if all_backends or backend.startswith('vs'):
-                print(k + ':')
+                print(f'{k}:')
                 dump_guids(v)
         elif k in ['lang_guids']:
             if all_backends or backend.startswith('vs') or backend == 'xcode':
-                print(k + ':')
+                print(f'{k}:')
                 dump_guids(v)
         elif k == 'meson_command':
             if all_backends or backend.startswith('vs'):
                 print('Meson command used in build file regeneration: ' + ' '.join(v))
         elif k == 'pkgconf_envvar':
-            print('Last seen PKGCONFIG environment variable value: ' + v)
+            print(f'Last seen PKGCONFIG environment variable value: {v}')
         elif k == 'version':
-            print('Meson version: ' + v)
+            print(f'Meson version: {v}')
         elif k == 'cross_files':
             if v:
                 print('Cross File: ' + ' '.join(v))
@@ -95,8 +95,8 @@ def run(options):
                 dump_compilers(v[for_machine])
         elif k == 'deps':
             def print_dep(dep_key, dep):
-                print('  ' + dep_key[0][1] + ": ")
-                print('      compile args: ' + repr(dep.get_compile_args()))
+                print(f'  {dep_key[0][1]}: ')
+                print(f'      compile args: {repr(dep.get_compile_args())}')
                 print('      link args: ' + repr(dep.get_link_args()))
                 if dep.get_sources():
                     print('      sources: ' + repr(dep.get_sources()))

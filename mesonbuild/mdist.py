@@ -47,13 +47,13 @@ def add_arguments(parser):
 
 
 def create_hash(fname):
-    hashname = fname + '.sha256sum'
+    hashname = f'{fname}.sha256sum'
     m = hashlib.sha256()
     m.update(open(fname, 'rb').read())
     with open(hashname, 'w', encoding='utf-8') as f:
         # A space and an asterisk because that is the format defined by GNU coreutils
         # and accepted by busybox and the Perl shasum tool.
-        f.write('{} *{}\n'.format(m.hexdigest(), os.path.basename(fname)))
+        f.write(f'{m.hexdigest()} *{os.path.basename(fname)}\n')
 
 
 def del_gitfiles(dirname):
@@ -84,10 +84,12 @@ def process_submodules(dirname):
 
 def run_dist_scripts(src_root, bld_root, dist_root, dist_scripts, subprojects):
     assert os.path.isabs(dist_root)
-    env = {}
-    env['MESON_DIST_ROOT'] = dist_root
-    env['MESON_SOURCE_ROOT'] = src_root
-    env['MESON_BUILD_ROOT'] = bld_root
+    env = {
+        'MESON_DIST_ROOT': dist_root,
+        'MESON_SOURCE_ROOT': src_root,
+        'MESON_BUILD_ROOT': bld_root,
+    }
+
     for d in dist_scripts:
         if d.subproject and d.subproject not in subprojects:
             continue
@@ -137,7 +139,7 @@ def git_clone(src_root, distdir):
         subprocess.check_call(['git', 'clone', '--shared', src_root, distdir])
     else:
         subdir = Path(src_root).relative_to(repo_root)
-        tmp_distdir = distdir + '-tmp'
+        tmp_distdir = f'{distdir}-tmp'
         if os.path.exists(tmp_distdir):
             windows_proof_rmtree(tmp_distdir)
         os.makedirs(tmp_distdir)
@@ -184,10 +186,10 @@ def create_dist_hg(dist_name, archives, src_root, bld_root, dist_sub, dist_scrip
         mlog.warning('dist scripts are not supported in Mercurial projects')
 
     os.makedirs(dist_sub, exist_ok=True)
-    tarname = os.path.join(dist_sub, dist_name + '.tar')
-    xzname = tarname + '.xz'
-    gzname = tarname + '.gz'
-    zipname = os.path.join(dist_sub, dist_name + '.zip')
+    tarname = os.path.join(dist_sub, f'{dist_name}.tar')
+    xzname = f'{tarname}.xz'
+    gzname = f'{tarname}.gz'
+    zipname = os.path.join(dist_sub, f'{dist_name}.zip')
     # Note that -X interprets relative paths using the current working
     # directory, not the repository root, so this must be an absolute path:
     # https://bz.mercurial-scm.org/show_bug.cgi?id=6267
@@ -196,8 +198,21 @@ def create_dist_hg(dist_name, archives, src_root, bld_root, dist_sub, dist_scrip
     # be useful to link the tarball to the Mercurial revision for either
     # manual inspection or in case any code interprets it for a --version or
     # similar.
-    subprocess.check_call(['hg', 'archive', '-R', src_root, '-S', '-t', 'tar',
-                           '-X', src_root + '/.hg[a-z]*', tarname])
+    subprocess.check_call(
+        [
+            'hg',
+            'archive',
+            '-R',
+            src_root,
+            '-S',
+            '-t',
+            'tar',
+            '-X',
+            f'{src_root}/.hg[a-z]*',
+            tarname,
+        ]
+    )
+
     output_names = []
     if 'xztar' in archives:
         import lzma
@@ -283,7 +298,7 @@ def run(options):
     priv_dir = os.path.join(bld_root, 'meson-private')
     dist_sub = os.path.join(bld_root, 'meson-dist')
 
-    dist_name = b.project_name + '-' + b.project_version
+    dist_name = f'{b.project_name}-{b.project_version}'
 
     archives = determine_archives_to_generate(options)
 
@@ -308,10 +323,14 @@ def run(options):
         return 1
     if names is None:
         return 1
-    rc = 0
-    if not options.no_tests:
-        # Check only one.
-        rc = check_dist(names[0], get_meson_command(), extra_meson_args, bld_root, priv_dir)
+    rc = (
+        0
+        if options.no_tests
+        else check_dist(
+            names[0], get_meson_command(), extra_meson_args, bld_root, priv_dir
+        )
+    )
+
     if rc == 0:
         for name in names:
             create_hash(name)

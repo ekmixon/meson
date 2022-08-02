@@ -173,7 +173,10 @@ class AstInterpreter(InterpreterBase):
         symlinkless_dir = os.path.realpath(absdir)
         build_file = os.path.join(symlinkless_dir, 'meson.build')
         if build_file in self.processed_buildfiles:
-            sys.stderr.write('Trying to enter {} which has already been visited --> Skipping\n'.format(args[0]))
+            sys.stderr.write(
+                f'Trying to enter {args[0]} which has already been visited --> Skipping\n'
+            )
+
             return
         self.processed_buildfiles.add(build_file)
 
@@ -251,15 +254,12 @@ class AstInterpreter(InterpreterBase):
                 key_resolver: T.Callable[[mparser.BaseNode], str] = default_resolve_key,
                 duplicate_key_error: T.Optional[str] = None,
             ) -> T.Tuple[T.List[TYPE_nvar], TYPE_nkwargs]:
-        if isinstance(args, ArgumentNode):
-            kwargs = {}  # type: T.Dict[str, TYPE_nvar]
-            for key, val in args.kwargs.items():
-                kwargs[key_resolver(key)] = val
-            if args.incorrect_order():
-                raise InvalidArguments('All keyword arguments must be after positional arguments.')
-            return self.flatten_args(args.arguments), kwargs
-        else:
+        if not isinstance(args, ArgumentNode):
             return self.flatten_args(args), {}
+        kwargs = {key_resolver(key): val for key, val in args.kwargs.items()}
+        if args.incorrect_order():
+            raise InvalidArguments('All keyword arguments must be after positional arguments.')
+        return self.flatten_args(args.arguments), kwargs
 
     def evaluate_comparison(self, node: ComparisonNode) -> bool:
         self.evaluate_statement(node.left)
@@ -343,10 +343,10 @@ class AstInterpreter(InterpreterBase):
                 result = not result
 
         elif isinstance(node, ArrayNode):
-            result = [x for x in node.args.arguments]
+            result = list(node.args.arguments)
 
         elif isinstance(node, ArgumentNode):
-            result = [x for x in node.arguments]
+            result = list(node.arguments)
 
         elif isinstance(node, ArithmeticNode):
             if node.operation != 'add':
@@ -396,11 +396,7 @@ class AstInterpreter(InterpreterBase):
 
     def flatten_args(self, args_raw: T.Union[TYPE_nvar, T.Sequence[TYPE_nvar]], include_unknown_args: bool = False, id_loop_detect: T.Optional[T.List[str]] = None) -> T.List[TYPE_nvar]:
         # Make sure we are always dealing with lists
-        if isinstance(args_raw, list):
-            args = args_raw
-        else:
-            args = [args_raw]
-
+        args = args_raw if isinstance(args_raw, list) else [args_raw]
         flattend_args = []  # type: T.List[TYPE_nvar]
 
         # Resolve the contents of args
